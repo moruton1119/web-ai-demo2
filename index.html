@@ -105,10 +105,21 @@
     div.textContent = msg;
     logEl.appendChild(div);
   }
-  function fail(reason) {
+  function fail(reason, detail) {
     document.getElementById('failReason').textContent = reason;
+    // デバッグ詳細(報告用): どこで落ちたか+環境情報
+    const dbg = document.createElement('details');
+    dbg.style.cssText = 'margin-top:12px;color:#8b949e;font-size:12px;';
+    dbg.innerHTML = '<summary style="cursor:pointer">診断ログ(報告時にご活用ください)</summary><div class="log" id="failLog"></div>';
+    const failStep = document.getElementById('fail');
+    failStep.appendChild(dbg);
+    const fl = dbg.querySelector('#failLog');
+    fl.textContent = '[UA] ' + navigator.userAgent + '\n' + logEl.textContent + (detail ? '\n[error] ' + detail : '');
     show('fail');
   }
+  // 捕捉されないGPUエラーもログに拾う(プローブ失敗がここに出る)
+  addEventListener('unhandledrejection', function (e) { log('✗ 未処理エラー: ' + (e.reason && e.reason.message ? e.reason.message : e.reason), 'ng'); });
+  addEventListener('error', function (e) { log('✗ エラー: ' + e.message, 'ng'); });
 
   // モバイルUA(簡易ガード: 診断自体も弾く)
   if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) {
@@ -132,7 +143,7 @@
 
       // 3) 機能チェック (shader-f16)
       const device = await adapter.requestDevice();
-      if (!device.features.has('shader-f16')) { device.destroy(); fail('GPUが半精度演算(shader-f16)に対応していないため、動作できません。'); return; }
+      if (!device.features.has('shader-f16')) { device.destroy?.(); fail('GPUが半精度演算(shader-f16)に対応していないため、動作できません。'); return; }
       log('✓ shader-f16 対応', 'ok');
 
       // 4) メモリ実測プローブ
@@ -158,7 +169,8 @@
       const passed = !lost && !probeError && allocated >= TARGET_BYTES;
       // 解放
       for (const b of buffers) b.destroy();
-      device.destroy();
+      try { device.destroy(); } catch (e) {}
+      log('(確保済み: ' + (allocated / 1024 / 1024 / 1024).toFixed(2) + 'GB / 目標 ' + (TARGET_BYTES / 1024 / 1024 / 1024).toFixed(1) + 'GB, lost=' + lost + ', err=' + (probeError ? probeError.message : 'none') + ')', 'info');
 
       if (passed) {
         log('✓ メモリテスト合格 (' + (allocated / 1024 / 1024 / 1024).toFixed(1) + 'GB 確保成功)', 'ok');
