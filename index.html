@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>お絵描きチャット - 動作診断</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+    background: #0d1117; color: #e6edf3;
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+  }
+  .card {
+    max-width: 640px; width: 100%;
+    background: #161b22; border: 1px solid #30363d; border-radius: 16px;
+    padding: 32px;
+  }
+  h1 { font-size: 22px; margin-bottom: 8px; }
+  .sub { color: #8b949e; font-size: 14px; margin-bottom: 24px; line-height: 1.6; }
+  button {
+    font-size: 16px; padding: 14px 28px; border-radius: 10px; border: none;
+    background: #238636; color: #fff; cursor: pointer; font-weight: bold; width: 100%;
+  }
+  button:hover { background: #2ea043; }
+  button:disabled { background: #21262d; color: #484f58; cursor: not-allowed; }
+  .step {
+    display: none; padding: 16px; border-radius: 12px;
+    background: #0d1117; border: 1px solid #30363d; margin-top: 12px;
+    font-size: 14px; line-height: 1.8;
+  }
+  .step.active { display: block; }
+  .ok { color: #3fb950; }
+  .ng { color: #f85149; }
+  .info { color: #8b949e; }
+  .log { font-family: Consolas, monospace; font-size: 13px; white-space: pre-wrap; }
+  .progress-outer {
+    height: 8px; background: #21262d; border-radius: 4px; overflow: hidden; margin-top: 8px;
+  }
+  .progress-inner {
+    height: 100%; width: 0%; background: linear-gradient(90deg,#238636,#2ea043);
+    transition: width .15s;
+  }
+  .req { margin-top: 16px; font-size: 13px; color: #8b949e; line-height: 1.7; }
+  a { color: #58a6ff; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🎨 お絵描きチャット(準備中)</h1>
+  <p class="sub">
+    このサイトは<a href="https://github.com/moruton1119">もるラボ</a>のブラウザ内AI画像生成デモです。<br>
+    すべての処理はあなたのPCのブラウザ内で完結します(サーバー送信なし・秘密情報ゼロ)。<br>
+    利用前に、お使いのPCが動作要件を満たすか診断します。
+  </p>
+
+  <div id="intro" class="step active">
+    <p>診断には10〜30秒ほどかかります(グラフィックメモリの実測テストを行います)。</p>
+    <p class="info">※ PCのChrome / Edge をご利用ください。スマホ・タブレットには対応していません。</p>
+    <div style="height:16px"></div>
+    <button id="startBtn">診断を始める</button>
+  </div>
+
+  <div id="running" class="step">
+    <div id="log" class="log"></div>
+    <div class="progress-outer"><div id="prog" class="progress-inner"></div></div>
+  </div>
+
+  <div id="pass" class="step">
+    <p class="ok" style="font-size:18px;font-weight:bold;">✅ 診断に合格しました!</p>
+    <p style="margin-top:8px">お使いのPCでAI画像生成が動作できる見込みです。</p>
+    <p class="info" style="margin-top:8px">
+      生成機能は現在準備中です。公開までしばらくお待ちください。<br>
+      (公開時は初回のみモデルデータ 約6.2GB のダウンロードが必要・2回目から不要)
+    </p>
+  </div>
+
+  <div id="fail" class="step">
+    <p class="ng" style="font-size:18px;font-weight:bold;">❌ 残念ながら動作しません</p>
+    <p id="failReason" style="margin-top:8px"></p>
+    <div class="req">
+      【このデモの動作要件】<br>
+      ・Windows PC + Chrome / Edge(最新版)<br>
+      ・WebGPU対応グラフィックボード(<b>VRAM 8GB以上</b>推奨)<br>
+      例: RTX 3060以上 / RX 6600以上 / Intel Arc<br>
+      ・スマホ・タブレットには非対応
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const TARGET_BYTES = 6.5 * 1024 * 1024 * 1024; // Anima-Turbo(5.6GB)+LoRA+ワーク想定
+  const CHUNK = 240 * 1024 * 1024; // 1バッファ240MB(規定上限256MB内)
+  const logEl = document.getElementById('log');
+  const progEl = document.getElementById('prog');
+  const steps = { intro: document.getElementById('intro'), running: document.getElementById('running'), pass: document.getElementById('pass'), fail: document.getElementById('fail') };
+
+  function show(name) { for (const k in steps) steps[k].classList.toggle('active', k === name); }
+  function log(msg, cls) {
+    const div = document.createElement('div');
+    if (cls) div.className = cls;
+    div.textContent = msg;
+    logEl.appendChild(div);
+  }
+  function fail(reason) {
+    document.getElementById('failReason').textContent = reason;
+    show('fail');
+  }
+
+  // モバイルUA(簡易ガード: 診断自体も弾く)
+  if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) {
+    document.getElementById('startBtn').disabled = true;
+    document.getElementById('startBtn').textContent = 'スマホには対応していません';
+  }
+
+  document.getElementById('startBtn').addEventListener('click', async function () {
+    show('running');
+    try {
+      // 1) WebGPU 有無
+      if (!navigator.gpu) { fail('このブラウザはWebGPUに対応していません。最新のChrome / Edgeでお試しください。'); return; }
+      log('✓ WebGPU API を検出', 'ok');
+
+      // 2) アダプタ取得
+      const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+      if (!adapter) { fail('グラフィックデバイスを取得できませんでした。ブラウザやGPUドライバーの設定をご確認ください。'); return; }
+      let gpuName = '';
+      try { const info = adapter.info || await adapter.requestAdapterInfo?.(); gpuName = info ? (info.description || info.vendor || '') : ''; } catch (e) {}
+      log('✓ GPUアダプタ: ' + (gpuName || '(名前取得不可)'), 'ok');
+
+      // 3) 機能チェック (shader-f16)
+      const device = await adapter.requestDevice();
+      if (!device.features.has('shader-f16')) { device.destroy(); fail('GPUが半精度演算(shader-f16)に対応していないため、動作できません。'); return; }
+      log('✓ shader-f16 対応', 'ok');
+
+      // 4) メモリ実測プローブ
+      log('■ グラフィックメモリの確認中…(ここで画面が一瞬固まることがあります)', 'info');
+      let lost = false;
+      device.lost.then(function (info) { lost = true; });
+      const buffers = [];
+      let allocated = 0;
+      let probeError = null;
+      const touch = new Uint8Array(16);
+      try {
+        while (allocated < TARGET_BYTES) {
+          if (lost) break;
+          const buf = device.createBuffer({ size: CHUNK, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+          device.queue.writeBuffer(buf, 0, touch); // 確保を確実にするため軽く書き込み
+          buffers.push(buf);
+          allocated += CHUNK;
+          progEl.style.width = Math.min(100, Math.round(allocated / TARGET_BYTES * 100)) + '%';
+          await new Promise(function (r) { setTimeout(r, 10); }); // ロスト検出の猶予
+          if (device.limits === null) break;
+        }
+      } catch (e) { probeError = e; }
+      const passed = !lost && !probeError && allocated >= TARGET_BYTES;
+      // 解放
+      for (const b of buffers) b.destroy();
+      device.destroy();
+
+      if (passed) {
+        log('✓ メモリテスト合格 (' + (allocated / 1024 / 1024 / 1024).toFixed(1) + 'GB 確保成功)', 'ok');
+        await new Promise(function (r) { setTimeout(r, 400); });
+        show('pass');
+      } else {
+        log('✗ メモリテスト不合格 (約' + (allocated / 1024 / 1024 / 1024).toFixed(1) + 'GBまで確保)', 'ng');
+        fail('グラフィックメモリ(VRAM)が不足しています。VRAM 8GB以上のPCでご利用ください。');
+      }
+    } catch (e) {
+      fail('診断中にエラーが発生しました: ' + (e && e.message ? e.message : e));
+    }
+  });
+})();
+</script>
+</body>
+</html>
