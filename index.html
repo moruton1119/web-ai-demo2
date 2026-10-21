@@ -121,10 +121,13 @@
   addEventListener('unhandledrejection', function (e) { log('✗ 未処理エラー: ' + (e.reason && e.reason.message ? e.reason.message : e.reason), 'ng'); });
   addEventListener('error', function (e) { log('✗ エラー: ' + e.message, 'ng'); });
 
-  // モバイルUA(簡易ガード: 診断自体も弾く)
-  if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) {
-    document.getElementById('startBtn').disabled = true;
-    document.getElementById('startBtn').textContent = 'スマホには対応していません';
+  // モバイルガード(UA + タッチ/画面サイズの複合判定 — デスクトップモード偽装対策)
+  const uaMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  const touchMobile = navigator.maxTouchPoints > 1 && Math.min(screen.width, screen.height) < 900;
+  if (uaMobile || touchMobile) {
+    const btn = document.getElementById('startBtn');
+    btn.disabled = true;
+    btn.textContent = 'スマホ・タブレットには対応していません';
   }
 
   document.getElementById('startBtn').addEventListener('click', async function () {
