@@ -141,8 +141,20 @@
       const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
       if (!adapter) { fail('グラフィックデバイスを取得できませんでした。ブラウザやGPUドライバーの設定をご確認ください。'); return; }
       let gpuName = '';
-      try { const info = adapter.info || await adapter.requestAdapterInfo?.(); gpuName = info ? (info.description || info.vendor || '') : ''; } catch (e) {}
+      let gpuVendor = '';
+      try { const info = adapter.info || await adapter.requestAdapterInfo?.(); gpuName = info ? (info.description || info.vendor || '') : ''; gpuVendor = info ? (info.vendor || '') : ''; } catch (e) {}
       log('✓ GPUアダプタ: ' + (gpuName || '(名前取得不可)'), 'ok');
+
+      // 2.5) 内蔵GPU判定(名前ベース・high-performance要求で選ばれたアダプタが
+      //      内蔵GPUの場合のみ弾く。グラボ+iGPUのデュアル構成はグラボが選ばれるため影響なし)
+      const combinedName = ((gpuName || '') + ' ' + (gpuVendor || '')).toLowerCase();
+      const iGpuPatterns = ['intel(r) uhd', 'intel uhd', 'intel(r) iris', 'intel iris', 'intel(r) hd graphics', 'intel hd graphics', 'radeon(rx 6[0-9]{2,3}m|radeon graphics|radeon\(tm\) graphics|vega [0-9])', 'apple m[0-9]', 'qualcomm', 'mali-', 'adreno'];
+      const isIGpu = iGpuPatterns.some(function (p) { return new RegExp(p).test(combinedName); });
+      if (isIGpu) {
+        log('✗ 内蔵GPUと判定: ' + gpuName, 'ng');
+        fail('内蔵GPU(integrated graphics)ではこのデモを快適に動かせません。VRAM 8GB以上のグラフィックボード搭載PCでご利用ください。');
+        return;
+      }
 
       // 3) 機能チェック (shader-f16) — adapter側で確認し、device生成時に要求する
       //    ※ device.features は「要求した機能」しか入らないため、adapterで判定しないと常にfalseになる
