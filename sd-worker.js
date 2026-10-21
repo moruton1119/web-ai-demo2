@@ -8,11 +8,11 @@ const BASE = './sdcpp-runtime/3ddb0cb2589244dd4494ffbcd0117c2a3bd3a2a6';
 const PROFILE = 'webgpu-wasm32-asyncify';
 const COMMIT = 'f973fc41ec7545364ac9776c2440285f43ff2a30'; // circlestone-labs/Anima
 
-// 固定モデル(Anima-Turbo v1.1)
+// 固定モデル(Anima-Turbo v1.1)— bytesはHF実測値(進捗計算用)
 const MODEL_SOURCES = [
-  { slot: 'diffusion', path: '/models/anima-turbo-v1.1.safetensors', bytes: 4182558562, url: `https://huggingface.co/circlestone-labs/Anima/resolve/${COMMIT}/split_files/diffusion_models/anima-turbo-v1.1.safetensors` },
-  { slot: 'vae', path: '/models/qwen_image_vae.safetensors', bytes: 253806712, url: `https://huggingface.co/circlestone-labs/Anima/resolve/${COMMIT}/split_files/vae/qwen_image_vae.safetensors` },
-  { slot: 'lm', path: '/models/qwen_3_06b_base.safetensors', bytes: 1191831992, url: `https://huggingface.co/circlestone-labs/Anima/resolve/${COMMIT}/split_files/text_encoders/qwen_3_06b_base.safetensors` },
+  { slot: 'diffusion', path: '/models/anima-turbo-v1.1.safetensors', bytes: 4182230656, url: `https://huggingface.co/circlestone-labs/Anima/resolve/${COMMIT}/split_files/diffusion_models/anima-turbo-v1.1.safetensors` },
+  { slot: 'vae', path: '/models/qwen_image_vae.safetensors', bytes: 253806246, url: `https://huggingface.co/circlestone-labs/Anima/resolve/${COMMIT}/split_files/vae/qwen_image_vae.safetensors` },
+  { slot: 'lm', path: '/models/qwen_3_06b_base.safetensors', bytes: 1192135096, url: `https://huggingface.co/circlestone-labs/Anima/resolve/${COMMIT}/split_files/text_encoders/qwen_3_06b_base.safetensors` },
 ];
 // 固定LoRA(HF移管後にURL確定・multiplierは確定値)
 const LORA_SOURCES = [];
