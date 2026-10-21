@@ -141,9 +141,17 @@
       try { const info = adapter.info || await adapter.requestAdapterInfo?.(); gpuName = info ? (info.description || info.vendor || '') : ''; } catch (e) {}
       log('✓ GPUアダプタ: ' + (gpuName || '(名前取得不可)'), 'ok');
 
-      // 3) 機能チェック (shader-f16)
-      const device = await adapter.requestDevice();
-      if (!device.features.has('shader-f16')) { device.destroy?.(); fail('GPUが半精度演算(shader-f16)に対応していないため、動作できません。'); return; }
+      // 3) 機能チェック (shader-f16) — adapter側で確認し、device生成時に要求する
+      //    ※ device.features は「要求した機能」しか入らないため、adapterで判定しないと常にfalseになる
+      const wantF16 = adapter.features.has('shader-f16');
+      if (!wantF16) { fail('GPUが半精度演算(shader-f16)に対応していないため、動作できません。'); return; }
+      let device;
+      try {
+        device = await adapter.requestDevice({ requiredFeatures: ['shader-f16'] });
+      } catch (e) {
+        fail('GPUデバイスの初期化に失敗しました(f16要求): ' + (e && e.message ? e.message : e));
+        return;
+      }
       log('✓ shader-f16 対応', 'ok');
 
       // 4) メモリ実測プローブ
