@@ -72,9 +72,32 @@
     <p class="ok" style="font-size:18px;font-weight:bold;">✅ 診断に合格しました!</p>
     <p style="margin-top:8px">お使いのPCでAI画像生成が動作できる見込みです。</p>
     <p class="info" style="margin-top:8px">
-      生成機能は現在準備中です。公開までしばらくお待ちください。<br>
-      (公開時は初回のみモデルデータ 約6.2GB のダウンロードが必要・2回目から不要)
+      次のステップではAIモデル(Anima-Turbo・約5.6GB)をダウンロードします。<br>
+      初回のみ必要で、2回目からはダウンロード不要です(100Mbpsで約8分)。
     </p>
+    <div style="height:16px"></div>
+    <button id="loadBtn">モデルをダウンロードして開始</button>
+  </div>
+
+  <div id="loading" class="step">
+    <div id="dlStatus" style="margin-bottom:8px;font-weight:bold;">準備中…</div>
+    <div class="progress-outer"><div id="dlProg" class="progress-inner"></div></div>
+    <div id="dlDetail" class="info" style="margin-top:8px;font-size:13px"></div>
+    <div style="height:12px"></div>
+    <div id="genLog" class="log" style="max-height:180px;overflow-y:auto;color:#8b949e"></div>
+  </div>
+
+  <div id="studio" class="step">
+    <p class="ok" style="font-weight:bold">🎨 準備完了!(<span id="modelName"></span>)</p>
+    <div style="height:12px"></div>
+    <textarea id="prompt" rows="3" style="width:100%;background:#0d1117;color:#e6edf3;border:1px solid #30363d;border-radius:8px;padding:10px;font-size:14px" placeholder="生成したい絵を日本語で説明(例: 夕焼けの海辺を走る白い猫、アニメ風)"></textarea>
+    <div style="height:8px"></div>
+    <button id="genBtn">画像を生成</button>
+    <div style="height:12px"></div>
+    <div id="canvasWrap" style="display:none">
+      <canvas id="outCanvas" style="max-width:100%;border-radius:8px;border:1px solid #30363d"></canvas>
+    </div>
+    <div id="genStatus" class="info" style="margin-top:8px;font-size:13px"></div>
   </div>
 
   <div id="fail" class="step">
@@ -96,7 +119,7 @@
   const CHUNK = 240 * 1024 * 1024; // 1バッファ240MB(規定上限256MB内)
   const logEl = document.getElementById('log');
   const progEl = document.getElementById('prog');
-  const steps = { intro: document.getElementById('intro'), running: document.getElementById('running'), pass: document.getElementById('pass'), fail: document.getElementById('fail') };
+  const steps = { intro: document.getElementById('intro'), running: document.getElementById('running'), pass: document.getElementById('pass'), loading: document.getElementById('loading'), studio: document.getElementById('studio'), fail: document.getElementById('fail') };
 
   function show(name) { for (const k in steps) steps[k].classList.toggle('active', k === name); }
   function log(msg, cls) {
@@ -229,6 +252,82 @@
     } catch (e) {
       fail('診断中にエラーが発生しました: ' + (e && e.message ? e.message : e));
     }
+  });
+
+  // ============================== M2: 生成 ==============================
+  let worker = null;
+  const SLOT_LABELS = { diffusion: '画像生成モデル', vae: 'VAE', lm: 'テキストエンコーダ', 'lora:highres': 'LoRA(高画質化)', 'lora:detail': 'LoRA(ディテール)', 'lora:ba': 'LoRA(ブルアカ風)' };
+
+  function getWorker() {
+    if (!worker) {
+      worker = new Worker('./sd-worker.js', { type: 'module' });
+      worker.onmessage = onWorkerMessage;
+      worker.onerror = function (e) { genFail('Workerエラー: ' + (e.message || '不明')); };
+    }
+    return worker;
+  }
+
+  const dlFracs = {};
+  function renderDl() {
+    const keys = Object.keys(dlFracs);
+    if (!keys.length) return;
+    const total = keys.reduce(function (s, k) { return s + dlFracs[k].frac; }, 0) / keys.length;
+    document.getElementById('dlProg').style.width = Math.round(total * 100) + '%';
+    const cur = keys.filter(function (k) { return dlFracs[k].frac < 1; }).pop() || keys[keys.length - 1];
+    document.getElementById('dlStatus').textContent = dlFracs[cur].cached ? 'キャッシュ済みモデルを読み込み中…' : 'ダウンロード中: ' + (SLOT_LABELS[cur] || cur);
+    document.getElementById('dlDetail').textContent = keys.map(function (k) { return (SLOT_LABELS[k] || k) + ' ' + Math.round(dlFracs[k].frac * 100) + '%'; }).join(' / ');
+  }
+
+  function genLog(msg) {
+    const el = document.getElementById('genLog');
+    const div = document.createElement('div');
+    div.textContent = msg;
+    el.appendChild(div);
+    el.scrollTop = el.scrollHeight;
+  }
+  function genFail(msg) {
+    document.getElementById('dlStatus').textContent = '❌ エラーが発生しました';
+    genLog('[error] ' + msg);
+    alert('エラー: ' + msg + '\n\n詳しくはログをご確認ください。');
+  }
+
+  function onWorkerMessage(ev) {
+    const m = ev.data;
+    if (m.type === 'dl') { dlFracs[m.slot] = { frac: m.frac, cached: !!m.cached }; renderDl(); }
+    else if (m.type === 'log') { genLog(m.message); }
+    else if (m.type === 'stage') {
+      if (m.stage === 'model-load') { document.getElementById('dlStatus').textContent = 'モデルをGPUに読み込み中…(数分)'; document.getElementById('dlDetail').textContent = '初回は特に時間がかかります'; }
+      if (m.stage === 'sampling') { document.getElementById('genStatus').textContent = '生成中… (数分)'; }
+    }
+    else if (m.type === 'ready') {
+      document.getElementById('modelName').textContent = m.modelVersion;
+      show('studio');
+    }
+    else if (m.type === 'image') {
+      const canvas = document.getElementById('outCanvas');
+      canvas.width = m.width; canvas.height = m.height;
+      const ctx = canvas.getContext('2d');
+      const imgData = new ImageData(new Uint8ClampedArray(m.pixels), m.width, m.height);
+      ctx.putImageData(imgData, 0, 0);
+      document.getElementById('canvasWrap').style.display = 'block';
+      document.getElementById('genStatus').textContent = '✅ 生成完了';
+      document.getElementById('genBtn').disabled = false;
+    }
+    else if (m.type === 'error') { genFail(m.message); document.getElementById('genBtn').disabled = false; }
+  }
+
+  document.getElementById('loadBtn').addEventListener('click', function () {
+    show('loading');
+    document.getElementById('dlStatus').textContent = '準備中…';
+    getWorker().postMessage({ type: 'init' });
+  });
+
+  document.getElementById('genBtn').addEventListener('click', function () {
+    const prompt = document.getElementById('prompt').value.trim();
+    if (!prompt) { alert('生成したい絵の説明を入力してください'); return; }
+    this.disabled = true;
+    document.getElementById('genStatus').textContent = '生成中… (数分)';
+    getWorker().postMessage({ type: 'generate', prompt: prompt });
   });
 })();
 </script>
