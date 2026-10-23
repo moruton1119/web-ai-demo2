@@ -14,8 +14,12 @@ const MODEL_SOURCES = [
   { slot: 'vae', path: '/models/qwen_image_vae.safetensors', bytes: 253806246, url: `https://huggingface.co/circlestone-labs/Anima/resolve/${COMMIT}/split_files/vae/qwen_image_vae.safetensors` },
   { slot: 'lm', path: '/models/qwen_3_06b_base.safetensors', bytes: 1192135096, url: `https://huggingface.co/circlestone-labs/Anima/resolve/${COMMIT}/split_files/text_encoders/qwen_3_06b_base.safetensors` },
 ];
-// 固定LoRA(HF移管後にURL確定・multiplierは確定値)
-const LORA_SOURCES = [];
+// 固定LoRA — HF公開ミラー(CDLA-Permissive-2.0・再配布自由)から直接DL
+// 推奨強度: highres公式推奨1.0 / detail公式推奨±0.5以内 → デフォルト0.4(控えめ)
+const LORA_SOURCES = [
+  { name: 'highres', path: '/models/lora/anima-highres-aesthetic-boost.safetensors', bytes: 138662176, multiplier: 1.0, url: 'https://huggingface.co/LyliaEngine/anima-highres-aesthetic-boost/resolve/main/anima-highres-aesthetic-boost.safetensors' },
+  { name: 'detail', path: '/models/lora/Anima_Detail_Tweaker.safetensors', bytes: 91851392, multiplier: 0.4, url: 'https://huggingface.co/LyliaEngine/Anima_Detail_Tweaker/resolve/main/Anima_Detail_Tweaker.safetensors' },
+];
 const CACHE = 'web-ai-demo2-models-v1';
 
 let core = null;
