@@ -103,6 +103,18 @@
   <div id="fail" class="step">
     <p class="ng" style="font-size:18px;font-weight:bold;">❌ 残念ながら動作しません</p>
     <p id="failReason" style="margin-top:8px"></p>
+    <div id="adapterHelp" style="display:none" class="req">
+      【ブラウザがGPUを認識しない場合の復旧手順】<br>
+      GPUに問題があるとChromeは安全のためWebGPUを「ソフトウェアのみ」に切り替えることがあります。<br>
+      以下で復旧する場合があります:<br>
+      1. アドレスバーに <b>chrome://settings/system</b> と入力<br>
+      2. 「<b>可能な場合はハードウェア アクセラレーションを使用</b>」を確認<br>
+      　・OFFなら → ONにする<br>
+      　・ONのままなら → 一度OFF→再起動→ON→再起動<br>
+      　(このトグル操作で、GPUクラッシュのカウンターがリセットされます)<br>
+      3. <b>chrome://gpu</b> を開き、WebGPUの行が「Hardware accelerated」に戻っていれば成功<br>
+      4. このページに戻って、Ctrl+Shift+R(強制再読み込み)してから再度診断
+    </div>
     <div class="req">
       【このデモの動作要件】<br>
       ・Windows PC + Chrome / Edge(最新版)<br>
@@ -162,7 +174,7 @@
 
       // 2) アダプタ取得
       const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
-      if (!adapter) { fail('グラフィックデバイスを取得できませんでした。ブラウザやGPUドライバーの設定をご確認ください。'); return; }
+      if (!adapter) { fail('グラフィックデバイスを取得できませんでした。ブラウザやGPUドライバーの設定をご確認ください。'); document.getElementById('adapterHelp').style.display = 'block'; return; }
       let gpuName = '';
       let gpuVendor = '';
       try { const info = adapter.info || await adapter.requestAdapterInfo?.(); gpuName = info ? (info.description || info.vendor || '') : ''; gpuVendor = info ? (info.vendor || '') : ''; } catch (e) {}
