@@ -218,7 +218,7 @@
         @compute @workgroup_size(256)
         fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
           let i = gid.x;
-          if (i < arrayLength(&data)) { data[i] = data[i] ^ 0u + 1u; }
+          if (i < arrayLength(&data)) { data[i] = (data[i] ^ 0u) + 1u; }
         }` });
       const pipeline = device.createComputePipeline({ layout: 'auto', compute: { module: shader, entryPoint: 'main' } });
       const BINDS_PER_BUF = Math.floor(CHUNK / BIND_MAX);
